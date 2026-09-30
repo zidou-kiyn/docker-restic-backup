@@ -1,0 +1,3 @@
+# crontab -e 加入（每天 04:00；日志按天分文件，7 天后由第二行清理）
+0 4 * * * /opt/docker-restic-backup/backup.sh >> /var/log/docker-backup/backup_$(date +\%Y\%m\%d).log 2>&1
+0 8 * * * find /var/log/docker-backup -name 'backup_*.log' -mtime +7 -delete

@@ -1,0 +1,36 @@
+# 复制为 backup.conf 按需修改。这是 bash 语法，会被 backup.sh source，用于覆盖脚本内的默认值。
+# 不改的项可以删掉或注释。此文件不入 git（可能暴露你跑了哪些服务）。
+
+# 项目根目录：每个一级子目录 = 一个项目（compose 工程或 bind mount 数据目录）
+# 默认：本脚本目录的上一级
+#SERVICE_ROOT=/docker/service
+
+# 不当作项目处理的一级目录名（默认只有本脚本目录自身）
+#EXCLUDE_PROJECTS=(docker-restic-backup tmp)
+
+# 优先处理的项目（停机时间敏感的放前面，例如游戏服）
+#PRIORITY=(mcsm)
+
+# compose/docker stop 宽限秒数；到期强杀
+#STOP_TIMEOUT=300
+
+# 停容器前导出的容器日志存放处与保留天数
+#CONTAINER_LOG_DIR=/var/log/docker-backup/containers
+#CONTAINER_LOG_RETENTION_DAYS=30
+
+# AutoRemove 容器（由面板/管理器托管的实例）停止后，等待管理器重建的最长秒数
+#MANAGED_WAIT_MAX=600
+
+# host 组：宿主机配置路径与排除（restic --exclude 语法，支持通配）
+#HOST_PATHS=(/etc /root /usr/local/sbin /usr/local/bin /var/spool/cron /opt/1panel)
+#HOST_EXCLUDES=(/root/.cache /root/.npm /opt/1panel/tmp /opt/1panel/log '/etc/pve/.*')
+
+# host 组备份前停止的 systemd 服务（如面板：其数据库需要停机一致性）；为空则不停
+#HOST_SERVICES_TO_STOP=(1panel-core 1panel-agent)
+
+# Proxmox VE：存在 config.db 且有 sqlite3 时自动做一致快照并纳入 host 组；置空可关闭
+#PVE_CONFIG_DB=/var/lib/pve-cluster/config.db
+#PVE_CONFIG_DB_SNAPSHOT=/var/backups/pve-config.db
+
+# 保留策略（restic forget 参数；按 host+tags 分组，即每个项目独立计数）
+#KEEP_ARGS=(--keep-daily 7 --keep-weekly 4 --keep-monthly 3)

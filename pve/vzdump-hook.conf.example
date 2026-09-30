@@ -1,0 +1,14 @@
+# 复制到 /etc/vzdump-hook.conf（bash 语法，被两个脚本 source）
+# rclone mount 挂载点；PVE 存储 (dir) 的 path 应在其下，并设 is_mountpoint
+MOUNTPOINT=/mnt/cloud
+# 归档在云端的 rclone 路径 = <remote>:<挂载的远端路径>/<PVE 存储 path 相对挂载点>/dump
+REMOTE=myremote:pve_backup/dump
+RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+# rclone mount 的 --rc-addr
+RC_URL=http://127.0.0.1:5572
+# 通知脚本（本仓库 notify.sh 的安装位置）
+NOTIFY=/opt/docker-restic-backup/notify.sh
+VERIFY=/usr/local/sbin/vzdump-upload-verify.sh
+# 等待写回上限（秒）与轮询间隔
+MAX_WAIT=21600
+INTERVAL=60

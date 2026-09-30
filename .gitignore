@@ -1,0 +1,13 @@
+# 密钥 / 机器相关配置 —— 永远不提交
+.env
+.restic-pass
+backup.conf
+excludes.txt
+hooks/*
+!hooks/*.example
+!hooks/README.md
+pve/vzdump-hook.conf
+# 运行产物
+*.log
+*.bak*
+*.old

@@ -1,0 +1,23 @@
+#!/bin/bash
+# hooks/<项目名>.pre-stop —— 停该项目容器之前运行；退出非 0 则跳过该项目并告警（stdout/stderr 作为说明）。
+# 参数：$1 项目名  $2 项目目录  $3 compose 组数  $4 裸容器数
+#
+# 本例：MCStarter (MCSM) 面板。它的 daemon 容器停止时会级联关闭托管的 MC 实例；
+# 只有当 global.json 里 enableSoftShutdown=true 且 softShutdownSkipDocker=true 时，
+# 实例才会被优雅保存后关闭，否则等于强杀。启用：去掉 .example 后缀并 chmod +x。
+set -u
+PROJ_DIR="$2"
+GLOBAL_JSON="$PROJ_DIR/daemon/data/Config/global.json"
+
+# 没有要停的容器就无所谓
+[ "$3" -gt 0 ] || exit 0
+
+if ! python3 -c "
+import json,sys
+d=json.load(open('$GLOBAL_JSON'))
+sys.exit(0 if d.get('enableSoftShutdown') is True and d.get('softShutdownSkipDocker') is True else 1)
+" 2>/dev/null; then
+  echo "MCSM global.json 的 enableSoftShutdown / softShutdownSkipDocker 必须都为 true，否则停 daemon 会强杀 MC 实例；请在面板修正"
+  exit 1
+fi
+exit 0
