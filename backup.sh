@@ -28,6 +28,7 @@ BACKUP_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 # ---------------------------- 配置区（默认值；用 backup.conf 覆盖） ---------------
 SERVICE_ROOT="$(dirname "$BACKUP_DIR")"            # 项目根目录，默认为本目录的上级
 EXCLUDE_PROJECTS=("$(basename "$BACKUP_DIR")")      # 不当作项目处理的一级目录（本目录已由 host 组覆盖）
+SKIP_COMPOSE=()                      # 不停机的 compose 工程名（-p 名，如 CI runner）；其目录请同时写进 excludes.txt
 PRIORITY=()                          # 优先处理的项目（尽早恢复的服务放前面）
 STOP_TIMEOUT=300                     # compose/docker stop 的宽限秒数
 CONTAINER_LOG_DIR=/var/log/docker-backup/containers   # 停容器前导出的容器日志
@@ -164,7 +165,8 @@ ordered_projects() {
   for p in "${PRIORITY[@]}"; do grep -qx "$p" <<<"$all" && echo "$p"; done
   for p in $all; do [[ " ${PRIORITY[*]} " == *" $p "* ]] || echo "$p"; done
 }
-groups_of() { printf '%s\n' "${DISC[@]}" | awk -F'\t' -v p="$1" '$1=="compose" && $2==p {print $4"\t"$5"\t"$6}' | sort -u; }
+groups_of() { printf '%s\n' "${DISC[@]}" | awk -F'\t' -v p="$1" -v skip=" ${SKIP_COMPOSE[*]} " \
+  '$1=="compose" && $2==p && index(skip, " "$4" ")==0 {print $4"\t"$5"\t"$6}' | sort -u; }
 plains_of() { printf '%s\n' "${DISC[@]}" | awk -F'\t' -v p="$1" '$1=="plain"   && $2==p {print $3}' | sort -u; }
 
 compose_cmd() {   # compose_cmd "<cp>\t<wd>\t<cf>" -> 打印 docker compose 参数数组（NUL 分隔）
