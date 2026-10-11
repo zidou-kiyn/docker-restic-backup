@@ -14,7 +14,7 @@ vzdump 写完归档就"完成"了，但实际上文件还在本地 VFS 缓存里
 ```bash
 cp vzdump-hook-check-rclone-mount.sh vzdump-upload-verify.sh /usr/local/sbin/ && chmod +x /usr/local/sbin/vzdump-*.sh
 cp vzdump-hook.conf.example /etc/vzdump-hook.conf && vi /etc/vzdump-hook.conf
-echo 'hookscript: /usr/local/sbin/vzdump-hook-check-rclone-mount.sh' >> /etc/vzdump.conf
+echo 'script: /usr/local/sbin/vzdump-hook-check-rclone-mount.sh' >> /etc/vzdump.conf
 ```
 
 rclone mount 的 systemd 单元需要带 `--rc --rc-addr 127.0.0.1:5572 --rc-no-auth`（校验脚本用 `vfs/stats` 查队列），
