@@ -27,8 +27,24 @@
 | 钩子 | `hooks/<项目>.pre-stop` 可拒绝停机（见 `hooks/README.md`） |
 | 通知 | `notify.sh`：Telegram，失败只写 syslog、永远 exit 0 |
 
-一致性说明：这是**应用一致**备份（容器停了再拷），代价是每个项目几十秒停机。
-不能接受停机的项目，用 `--seed` 模式的思路单独处理（或改用数据库 dump 再备）。
+## 不停机备份（HOT_BACKUP=1，默认）
+
+备份前 `hotsnap.py` 自动识别项目里「热拷不一致」的数据并导出一致副本，容器**不停**：
+
+| 数据 | 识别 | 导出 |
+|---|---|---|
+| PostgreSQL / MySQL·MariaDB / MongoDB | 容器镜像名 | `pg_dumpall` / `mysqldump --single-transaction` / `mongodump` |
+| Redis / Valkey | 镜像名 | `BGSAVE` 完成后拷 `dump.rdb` |
+| Minecraft（itzg 镜像） | 镜像名 | RCON `save-off` + `save-all flush`，restic 期间保持 save-off，备份完 `save-on`（玩家不掉线） |
+| SQLite | 文件头 `SQLite format 3`（不看扩展名） | python sqlite3 在线备份 API |
+| 其他文件 | — | 直接热拷（配置、上传、日志） |
+| **无法识别的数据库**（LevelDB/H2/influx/es…） | 文件特征 | **该项目自动退回停机备份**并发 TG；可丢的加 `HOT_IGNORE`，必须停机的加 `HOT_FORCE_STOP` |
+
+一致副本以 bind mount 挂到 `<项目>/.hotsnap`，restic 快照里的路径是 `/docker/service/<项目>/.hotsnap/…`（原始数据库文件被排除），
+旁边有 `RESTORE.md` 写明每个库怎么导回。快照 tag 多一个 `hot`。
+`HOT_BACKUP=0` 回到旧的停机流程。
+
+日志建议**全部备份**（不要排除 `logs/`）：增量很小，而且 restic 里的副本是入侵者删不掉的取证材料；`excludes.txt` 只放 cache/tmp 这类真正的临时数据。
 
 ## 安装
 

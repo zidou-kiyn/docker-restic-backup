@@ -17,7 +17,7 @@ cp vzdump-hook.conf.example /etc/vzdump-hook.conf && vi /etc/vzdump-hook.conf
 echo 'script: /usr/local/sbin/vzdump-hook-check-rclone-mount.sh' >> /etc/vzdump.conf
 ```
 
-rclone mount 的 systemd 单元需要带 `--rc --rc-addr 127.0.0.1:5572 --rc-no-auth`（校验脚本用 `vfs/stats` 查队列），
+rclone mount 的 systemd 单元需要带 `--rc --rc-addr unix:///run/rclone-rc/rc.sock --rc-no-auth`（配合 `RuntimeDirectory=rclone-rc` + `RuntimeDirectoryMode=0700`；**不要用 TCP**：无认证的 127.0.0.1 端口能被 host 网络容器访问，等于交出 root 文件读写）（校验脚本用 `vfs/stats` 查队列），
 PVE 存储定义建议加 `is_mountpoint <挂载点>`（双保险）。
 
 ## 测试

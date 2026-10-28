@@ -29,6 +29,11 @@ BACKUP_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 SERVICE_ROOT="$(dirname "$BACKUP_DIR")"            # 项目根目录，默认为本目录的上级
 EXCLUDE_PROJECTS=("$(basename "$BACKUP_DIR")")      # 不当作项目处理的一级目录（本目录已由 host 组覆盖）
 SKIP_COMPOSE=()                      # 不停机的 compose 工程名（-p 名，如 CI runner）；其目录请同时写进 excludes.txt
+HOT_BACKUP=1                         # 1 = 默认不停机：hotsnap.py 导出一致副本（pg/mysql/redis/mongo dump、sqlite 在线备份、MC save-off）
+                                     #     识别不了的数据 → 自动退回停机备份并告警；0 = 全部停机备份（旧行为）
+HOT_FORCE_STOP=()                    # 这些项目总是停机备份（即使 HOT_BACKUP=1）
+HOT_IGNORE=()                        # "<项目>:<glob>"：该路径下的未知数据不算阻塞（如 gitea:data/gitea/queues/*，可丢的队列）
+HOT_SNAP_DIR=/var/lib/docker-backup/hotsnap   # 一致副本的输出目录（每个项目一个子目录；restic 以 <项目>/.hotsnap 路径备份）
 PRIORITY=()                          # 优先处理的项目（尽早恢复的服务放前面）
 STOP_TIMEOUT=300                     # compose/docker stop 的宽限秒数
 CONTAINER_LOG_DIR=/var/log/docker-backup/containers   # 停容器前导出的容器日志
@@ -233,12 +238,49 @@ start_host_services() {
 }
 on_exit() {
   local rc=$?
+  [ -n "${HOT_MC_FILE:-}" ] && mc_resume "$HOT_MC_FILE"
+  local d; for d in "$SERVICE_ROOT"/*/.hotsnap; do mountpoint -q "$d" 2>/dev/null && { umount -l "$d"; rmdir "$d"; }; done 2>/dev/null
   if [ -n "$CUR_PROJECT" ]; then warn "trap: script exiting while project '$CUR_PROJECT' is stopped — starting it"; start_current_project || true; fi
   start_host_services || true
   exit $rc
 }
 trap on_exit EXIT
 trap 'err "interrupted"; exit 130' INT TERM
+
+
+# ---------------------------- 不停机备份 -----------------------------------------
+# hot_backup_project <项目> <目录> → 0 成功 / 1 restic 失败 / 2 需退回停机（未知数据/导出失败）
+# restic 快照内容：项目目录（排除 hotsnap 给出的原始数据库文件） + 项目目录/.hotsnap（bind 自 HOT_SNAP_DIR/<项目>，一致副本 + RESTORE.md）
+HOTSNAP="$BACKUP_DIR/hotsnap.py"
+HOT_NOTE=""
+HOT_MC_FILE=""
+mc_resume() {   # 把 hotsnap 置为 save-off 的 MC 服务器恢复自动保存（trap 也会调用）
+  local f=$1 c
+  [ -n "$f" ] && [ -s "$f" ] || { [ -n "$f" ] && rm -f "$f" 2>/dev/null; return 0; }
+  while read -r c; do [ -n "$c" ] && docker exec "$c" rcon-cli save-on >/dev/null 2>&1 && log "[mc] $c save-on"; done < "$f"
+  : > "$f"
+}
+hot_backup_project() {
+  local proj=$1 dir=$2 snap="$HOT_SNAP_DIR/$proj" out rc ign=() mnt="$dir/.hotsnap" x
+  for x in "${HOT_IGNORE[@]}"; do [ "${x%%:*}" = "$proj" ] && ign+=(--ignore "${x#*:}"); done
+  mkdir -p "$snap"; chmod 700 "$snap"
+  out=$(python3 "$HOTSNAP" "$dir" "$snap" "${ign[@]}" 2>>"$CONTAINER_LOG_DIR/hotsnap-$proj.err"); rc=$?
+  HOT_NOTE=$out
+  if [ $rc -ne 0 ]; then
+    if [ $rc -eq 2 ]; then warn "[$proj] hotsnap 需退回停机: $out"; else err "[$proj] hotsnap 内部错误 rc=$rc: $out"; fi
+    return 2
+  fi
+  log "[$proj] hotsnap: $out"
+  HOT_MC_FILE="$snap/.mc-save-off"
+  local exl=(); while read -r x; do [ -n "$x" ] && exl+=(--exclude "$dir/$x"); done < "$snap/EXCLUDES.txt"
+  mkdir -p "$mnt"
+  if ! mount --bind "$snap" "$mnt" 2>/dev/null; then err "[$proj] bind mount $mnt failed"; mc_resume "$HOT_MC_FILE"; HOT_MC_FILE=""; rmdir "$mnt" 2>/dev/null; return 2; fi
+  rc=0
+  restic_backup "$dir" --tag docker --tag "$proj" --tag hot "${EXCLUDE_ARGS[@]}" "${exl[@]}" || rc=1
+  umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null; rmdir "$mnt" 2>/dev/null
+  mc_resume "$HOT_MC_FILE"; HOT_MC_FILE=""
+  return $rc
+}
 
 # ---------------------------- 单个项目 -------------------------------------------
 process_project() {
@@ -264,9 +306,32 @@ process_project() {
     return 0
   fi
 
+  # --- 不停机路径：HOT_BACKUP=1 且项目不在 HOT_FORCE_STOP → hotsnap 导出一致副本后直接 restic；需退回时继续走下面的停机流程 ---
+  local hook="$BACKUP_DIR/hooks/$proj.pre-stop" hmsg="" hook_done=0 hrc
+  if [ "$HOT_BACKUP" = 1 ] && [[ " ${HOT_FORCE_STOP[*]} " != *" $proj "* ]] && [ -x "$HOTSNAP" ]; then
+    if [ -x "$hook" ]; then
+      if ! hmsg=$("$hook" "$proj" "$dir" "${#groups[@]}" "${#plains[@]}" 2>&1); then
+        err "[$proj] pre-stop hook refused: ${hmsg:-no message}"; RESULT[$proj]="❌ 跳过：pre-stop 钩子拒绝"; FAILED=1
+        notify "❌ $proj 备份跳过" "pre-stop 钩子拒绝：${hmsg:-无说明}"; return 0
+      fi
+      [ -n "$hmsg" ] && log "[$proj] pre-stop hook: $hmsg"; hook_done=1
+    fi
+    t0=$(date +%s)
+    hot_backup_project "$proj" "$dir"; hrc=$?
+    if [ $hrc -eq 0 ]; then
+      ADDED[$proj]=$LAST_ADDED; DOWNTIME[$proj]=0
+      RESULT[$proj]="✅ 热备 $(( $(date +%s) - t0 ))s +$(hsize "$LAST_ADDED")"
+      log "[$proj] restic ok snapshot=$LAST_SNAPSHOT added=$(hsize "$LAST_ADDED") files=$LAST_FILES"; log "[$proj] done: ${RESULT[$proj]}"; return 0
+    elif [ $hrc -eq 1 ]; then
+      err "[$proj] restic backup FAILED (hot)"; RESULT[$proj]="❌ 热备 restic失败"; FAILED=1; return 0
+    fi
+    notify "⚠️ $proj 退回停机备份" "不停机备份无法保证一致：$HOT_NOTE
+已改用停机备份（本次会停容器）。若该数据可丢，在 backup.conf 的 HOT_IGNORE 加 \"$proj:<路径glob>\"；若需固定停机，加入 HOT_FORCE_STOP。"
+    note="热备退回 "
+  fi
+
   # --- pre-stop 钩子：hooks/<项目>.pre-stop <项目名> <项目目录> <compose组数> <裸容器数>；非 0 退出 → 跳过 ---
-  local hook="$BACKUP_DIR/hooks/$proj.pre-stop" hmsg
-  if [ -x "$hook" ]; then
+  if [ -x "$hook" ] && [ "$hook_done" = 0 ]; then
     if ! hmsg=$("$hook" "$proj" "$dir" "${#groups[@]}" "${#plains[@]}" 2>&1); then
       err "[$proj] pre-stop hook refused: ${hmsg:-no message}"
       RESULT[$proj]="❌ 跳过：pre-stop 钩子拒绝"; FAILED=1

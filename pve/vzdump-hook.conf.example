@@ -5,7 +5,7 @@ MOUNTPOINT=/mnt/cloud
 REMOTE=myremote:pve_backup/dump
 RCLONE_CONFIG=/root/.config/rclone/rclone.conf
 # rclone mount 的 --rc-addr
-RC_URL=http://127.0.0.1:5572
+RC_SOCK=/run/rclone-rc/rc.sock
 # 通知脚本（本仓库 notify.sh 的安装位置）
 NOTIFY=/opt/docker-restic-backup/notify.sh
 VERIFY=/usr/local/sbin/vzdump-upload-verify.sh

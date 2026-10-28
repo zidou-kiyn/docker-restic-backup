@@ -11,6 +11,12 @@
 # 不停机的 compose 工程名（docker compose -p 的名字，如 CI runner）；其目录需另写进 excludes.txt
 #SKIP_COMPOSE=(my-ci)
 
+# 不停机备份（见 README「不停机备份」）
+#HOT_BACKUP=1
+#HOT_FORCE_STOP=(legacy-app)                  # 总是停机备份的项目
+#HOT_IGNORE=(gitea:data/gitea/queues/*)      # "<项目>:<glob>"：可丢的未知数据，不阻塞热备
+#HOT_SNAP_DIR=/var/lib/docker-backup/hotsnap
+
 # 优先处理的项目（停机时间敏感的放前面，例如游戏服）
 #PRIORITY=(mcsm)
 
