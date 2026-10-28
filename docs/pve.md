@@ -1,5 +1,7 @@
 # pve/ — vzdump 到 rclone 挂载云盘的配套
 
+脚本在仓库 `pve/` 目录。
+
 场景：PVE 的备份存储是一个 `dir` 类型存储，path 在 `rclone mount --vfs-cache-mode writes` 的挂载点下。
 vzdump 写完归档就"完成"了，但实际上文件还在本地 VFS 缓存里排队上传，几十 GB 可能要一小时。
 这两个脚本补上"云端确实收到了"这一步：

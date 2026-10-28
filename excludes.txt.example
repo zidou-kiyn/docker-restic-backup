@@ -1,8 +1,8 @@
 # 复制为 excludes.txt。restic --exclude-file 语法：每行一个模式，支持 * 通配，# 开头为注释。
 # 用途：项目目录里不值得备份的东西——日志、缓存、应用自己生成的备份（避免重复）。
 # 路径用绝对路径（以 SERVICE_ROOT 开头）。
-/docker/service/*/logs
-/docker/service/*/log
+# 日志建议保留（见 README）；如确要排除：
+#/docker/service/*/logs
 /docker/service/*/cache
 /docker/service/*/tmp
 # 例：面板托管的实例自带备份目录
