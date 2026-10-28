@@ -50,21 +50,21 @@ while IFS=$'\t' read -r name size vmid; do
           | python3 -c 'import json,sys; l=json.load(sys.stdin); print(l[0]["Size"] if l else -1)' 2>/dev/null || echo -1)
   human=$(numfmt --to=iec --suffix=B "$size" 2>/dev/null || echo "${size}B")
   if [ "$rsize" = "$size" ]; then
-    report+="✅ VM$vmid $name ($human)"$'\n'
+    report+="✅ VM$vmid · $human"$'\n'
     total=$((total + size))
   else
     fail=1
-    report+="❌ VM$vmid $name 本地=$size 云端=$rsize"$'\n'
+    report+="❌ VM$vmid · 本地 $(numfmt --to=iec --suffix=B "$size") / 云端 $( [ "$rsize" = -1 ] && echo 缺失 || numfmt --to=iec --suffix=B "$rsize")"$'\n'
   fi
 done < "$LIST"
 
-hdr="等待写回 ${wait_s}s"; [ "$timed_out" = 1 ] && hdr="⏰ 等待写回超时(${wait_s}s)，队列仍有 $(pending) 项"
+wait_h=$(printf '%dm%02ds' $((wait_s/60)) $((wait_s%60)))
 if [ "$fail" = 0 ] && [ "$timed_out" = 0 ]; then
-  notify "✅ vzdump 上传校验通过" "$hdr，共 $(numfmt --to=iec --suffix=B "$total")
-$report"
+  notify "☁️ PVE 备份已上传云端 · $(hostname -s)" "${report}— 共 $(numfmt --to=iec --suffix=B "$total") · 等待写回 $wait_h"
+elif [ "$timed_out" = 1 ]; then
+  notify "⏰ PVE 备份上传超时 · $(hostname -s)" "${report}— 等待 $wait_h 后队列仍有 $(pending) 项未上传"
 else
-  notify "❌ vzdump 上传校验失败" "$hdr
-$report"
+  notify "❌ PVE 备份上传校验失败 · $(hostname -s)" "${report}— 等待写回 $wait_h"
 fi
 rm -f "$LIST"
 exit 0
