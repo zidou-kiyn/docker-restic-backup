@@ -11,3 +11,4 @@ pve/vzdump-hook.conf
 *.log
 *.bak*
 *.old
+__pycache__/

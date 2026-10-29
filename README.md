@@ -1,6 +1,6 @@
 # docker-restic-backup
 
-单机 Docker 服务的 restic 备份：**不停机、自动识别数据库、按项目增量、Telegram 汇报**。
+单机 Docker 服务的 restic 备份：**不停机、自动识别数据库、按项目增量、Telegram / 企业微信汇报**。
 零配置发现项目与容器；密钥和机器相关配置全部在 git 之外。
 
 ```
@@ -21,7 +21,7 @@
 | **兜底** | 识别不了的数据库（LevelDB、H2、ES…）→ **该项目自动退回停机备份**并告警，不会产生"看着成功其实坏了"的快照 |
 | **host 组** | `/etc /root /usr/local/{s,}bin /var/spool/cron` + 本目录 + 可选面板目录；PVE 的 `config.db` 自动做一致快照 |
 | **保留** | `restic forget --group-by host,tags`（每个项目独立计数）；周日 `prune` + `check --read-data-subset=5%` |
-| **通知** | `notify.sh` → Telegram；失败只写 syslog，永远 exit 0 |
+| **通知** | `notify.sh` → Telegram（HTML）或企业微信群机器人（纯文本，按 .env 自动选）；失败只写 syslog，永远 exit 0 |
 
 详细规则：[docs/hot-backup.md](docs/hot-backup.md) · 恢复：[docs/restore.md](docs/restore.md)
 
