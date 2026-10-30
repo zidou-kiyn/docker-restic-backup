@@ -63,7 +63,7 @@ crontab -e                                       # 见 cron.example
 
 ## 附带
 
-- `pve/` — Proxmox vzdump 备份配套：写 rclone 挂载云盘（挂载检查 + 上传校验），或写 NFS 再 rclone 直传云盘。见 [docs/pve.md](docs/pve.md)
+- `pve/` — Proxmox vzdump 备份配套：写 rclone 挂载云盘（挂载检查 + 上传校验），或写 NFS 再 rclone 直传云盘；restic 仓库每日镜像到 NFS。见 [docs/pve.md](docs/pve.md)
 - `cron.example` — 定时与日志轮转
 
 ## 多机共用仓库

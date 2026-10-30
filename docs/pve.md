@@ -7,6 +7,8 @@
 | A. vzdump → rclone 挂载的云盘 | 只有云盘可用 | `vzdump-hook-check-rclone-mount.sh` + `vzdump-upload-verify.sh` |
 | B. vzdump → NFS → rclone 直传云盘（推荐） | 有 NFS 等网络备份存储；想避免本地盘的额外写入 | `vzdump-hook-nfs-offsite.sh` + `vzdump-offsite-sync.sh` |
 
+另有 `restic-nfs-mirror.sh`：把 Docker 备份的 restic 仓库（rclone 远端）每日镜像到 NFS，见文末 C 节。
+
 方案 A 里 vzdump 写进 `--vfs-cache-mode writes` 挂载点，归档会先完整写进本地 VFS 缓存再上传——每份备份在本地 SSD 上多写一遍（几十 GB/次）。方案 B 先写 NFS，再由 rclone 从 NFS 直接读、直接传远端，不经挂载、不落本地缓存。
 
 两个方案共用 `/etc/vzdump-hook.conf`（见 `vzdump-hook.conf.example`）和仓库的 `notify.sh`。
@@ -86,6 +88,23 @@ dir: nfs-backup
 ```bash
 /usr/local/sbin/vzdump-hook-nfs-offsite.sh job-start && echo ok                 # NFS 挂载检查
 vzdump <一个小 VM 的 VMID> --storage nfs-backup --mode snapshot --compress zstd  # 完整走一遍，约 1 分钟后收到 TG
+```
+
+---
+
+## C. restic 仓库每日镜像到 NFS
+
+`restic-nfs-mirror.sh` + `restic-nfs-mirror.service` / `.timer`：把 `.env` 里的 `RESTIC_REPOSITORY`（必须是 `rclone:<remote>:<path>`）`rclone sync` 到 NFS 子目录，作为第二份副本。镜像就是普通的 restic 本地仓库，云盘不可用时直接 `restic -r <NFS>/docker/restic snapshots` / `restore`（同一密码）。
+
+- 定时排在 backup.sh 之后（cron 04:00 → timer 05:00）；脚本仍会等 backup.sh 结束（最多 `WAIT_MAX_MIN` 分钟），避免镜像到半截的仓库。
+- 成功只写 syslog（`journalctl -t restic-nfs-mirror`），失败 / 跳过才通知。
+- 可选配置 `/etc/restic-nfs-mirror.conf`：`REPO_DIR` / `NFS_MOUNT` / `DST_SUBDIR` / `RCLONE_CONFIG` / `WAIT_MAX_MIN`。
+
+```bash
+cp restic-nfs-mirror.sh /usr/local/sbin/ && chmod +x /usr/local/sbin/restic-nfs-mirror.sh
+cp restic-nfs-mirror.service restic-nfs-mirror.timer /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now restic-nfs-mirror.timer
+systemctl start restic-nfs-mirror.service && journalctl -t restic-nfs-mirror -n 1   # 首次全量，之后增量
 ```
 
 ---

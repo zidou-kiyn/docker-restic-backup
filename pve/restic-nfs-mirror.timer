@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily restic repo mirror to NFS (schedule it after backup.sh)
+
+[Timer]
+# backup.sh 在 cron 里 04:00 跑，通常 10~20 分钟；脚本自己也会等 backup.sh 结束
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
