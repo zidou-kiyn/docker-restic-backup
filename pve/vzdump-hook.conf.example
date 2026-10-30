@@ -12,3 +12,9 @@ VERIFY=/usr/local/sbin/vzdump-upload-verify.sh
 # 等待写回上限（秒）与轮询间隔
 MAX_WAIT=21600
 INTERVAL=60
+
+# ---- NFS + 直传云端方案（vzdump-hook-nfs-offsite.sh / vzdump-offsite-sync.sh）----
+NFS_MOUNT=/mnt/ovh-backup                 # NFS 挂载点（PVE 存储 path 在其下，存储加 is_mountpoint <挂载点>）
+NFS_DUMPDIR=/mnt/ovh-backup/pve/dump      # vzdump 实际写入目录
+REMOTE_KEEP_LAST=4                        # 云端每个 VMID 保留几份（只清理本次任务里出现的 VMID）
+SYNC=/usr/local/sbin/vzdump-offsite-sync.sh
